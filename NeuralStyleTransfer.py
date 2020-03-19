@@ -19,6 +19,9 @@ from matplotlib.pyplot import imshow, show, gcf
 
 # In[3]:
 
+img_size = 512
+max_iter = 500
+show_iter = 50
 
 #vgg definition that conveniently let's you grab the outputs from any layer
 class VGG(nn.Module):
@@ -102,7 +105,7 @@ class GramMSELoss(nn.Module):
 
 
 # pre and post processing for images
-img_size = 512
+
 prep = transforms.Compose([transforms.Resize(img_size),
                            transforms.ToTensor(),
                            transforms.Lambda(lambda x: x[torch.LongTensor([2,1,0])]), #turn to BGR
@@ -156,11 +159,11 @@ opt_img = Variable(content_image.data.clone(), requires_grad=True)
 
 # In[7]:
 
-
+"""
 #display images
 for img in imgs:
     imshow(img);show()
-
+"""
 
 # In[8]:
 
@@ -170,10 +173,15 @@ style_layers = ['r11','r21','r31','r41', 'r51']
 content_layers = ['r42']
 loss_layers = style_layers + content_layers
 loss_fns = [GramMSELoss()] * len(style_layers) + [nn.MSELoss()] * len(content_layers)
+"""GramMSELoss() is a "neural network" that takes input and target and computes the MSELoss between Gram Matrix of
+input and target feature map. So loss_fns declared in the above line is a "neural network" """
+""" loss_fns is a "neural network" composed of 5 GramMSELoss() "neural networks" and one MSELoss "neural network". Its inputs 
+are the input and the target layers """
 if torch.cuda.is_available():
     loss_fns = [loss_fn.cuda() for loss_fn in loss_fns]
     
 #these are good weights settings:
+"""You can define different style weights for different style layers"""
 style_weights = [1e3/n**2 for n in [64,128,256,512,512]]
 content_weights = [1e0]
 weights = style_weights + content_weights
@@ -187,17 +195,22 @@ targets = style_targets + content_targets
 # In[9]:
 
 #run style transfer
-max_iter = 500
-show_iter = 50
-optimizer = optim.LBFGS([opt_img]);
+
+optimizer = optim.LBFGS([opt_img]); """Optimizer is defined on opt_image, i.e. the pixels of opt_image are the "parameters"
+                                    of the network that needs to be optimized through LBFGS"""
 n_iter=[0]
 
 while n_iter[0] <= max_iter:
-
+    """Here I have to redefine a new optimization process, i.e. make clear what my goal is"""
     def closure():
         optimizer.zero_grad()
+        """Outputs the feature maps for the loss_layers=content_layers+style_layers:"""
         out = vgg(opt_img, loss_layers)
+        """Calculates the loss for each layer:"""
         layer_losses = [weights[a] * loss_fns[a](A, targets[a]) for a,A in enumerate(out)]
+        """You take the first loss function, multiply it by its weight, its inputs are A (the image that is going to be optimized)
+        and targets[a] (the feature map that we want to specify in our loss)"""
+        """Total loss is the sum of the loss of each layer:"""
         loss = sum(layer_losses)
         loss.backward()
         n_iter[0]+=1
@@ -211,76 +224,10 @@ while n_iter[0] <= max_iter:
     
 #display result
 out_img = postp(opt_img.data[0].cpu().squeeze())
-imshow(out_img)
+# imshow(out_img)
+# show()
+out_img.save("Images/output_image.jpg")
 gcf().set_size_inches(10,10)
 
 
-# In[10]:
-
-
-#make the image high-resolution as described in 
-#"Controlling Perceptual Factors in Neural Style Transfer", Gatys et al. 
-#(https://arxiv.org/abs/1611.07865)
-
-#hr preprocessing
-img_size_hr = 800 #works for 8GB GPU, make larger if you have 12GB or more
-prep_hr = transforms.Compose([transforms.Resize(img_size_hr),
-                           transforms.ToTensor(),
-                           transforms.Lambda(lambda x: x[torch.LongTensor([2,1,0])]), #turn to BGR
-                           transforms.Normalize(mean=[0.40760392, 0.45795686, 0.48501961], #subtract imagenet mean
-                                                std=[1,1,1]),
-                           transforms.Lambda(lambda x: x.mul_(255)),
-                          ])
-#prep hr images
-imgs_torch = [prep_hr(img) for img in imgs]
-if torch.cuda.is_available():
-    imgs_torch = [Variable(img.unsqueeze(0).cuda()) for img in imgs_torch]
-else:
-    imgs_torch = [Variable(img.unsqueeze(0)) for img in imgs_torch]
-style_image, content_image = imgs_torch
-
-#now initialise with upsampled lowres result
-opt_img = prep_hr(out_img).unsqueeze(0)
-opt_img = Variable(opt_img.type_as(content_image.data), requires_grad=True)
-
-#compute hr targets
-style_targets = [GramMatrix()(A).detach() for A in vgg(style_image, style_layers)]
-content_targets = [A.detach() for A in vgg(content_image, content_layers)]
-targets = style_targets + content_targets
-
-
-# In[11]:
-
-
-#run style transfer for high res 
-max_iter_hr = 200
-optimizer = optim.LBFGS([opt_img]);
-n_iter=[0]
-while n_iter[0] <= max_iter_hr:
-
-    def closure():
-        optimizer.zero_grad()
-        out = vgg(opt_img, loss_layers)
-        layer_losses = [weights[a] * loss_fns[a](A, targets[a]) for a,A in enumerate(out)]
-        loss = sum(layer_losses)
-        loss.backward()
-        n_iter[0]+=1
-        #print loss
-        if n_iter[0]%show_iter == (show_iter-1):
-            print('Iteration: %d, loss: %f'%(n_iter[0]+1, loss.data[0]))
-#             print([loss_layers[li] + ': ' +  str(l.data[0]) for li,l in enumerate(layer_losses)]) #loss of each layer
-        return loss
-
-    optimizer.step(closure)
-    
-#display result
-out_img_hr = postp(opt_img.data[0].cpu().squeeze())
-imshow(out_img_hr)
-gcf().set_size_inches(10,10)
-
-
-# In[ ]:
-
-
-
-
+"""Controlling perceptual factors part removed"""
