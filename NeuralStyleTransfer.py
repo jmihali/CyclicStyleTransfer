@@ -19,9 +19,9 @@ from matplotlib.pyplot import imshow, show, gcf
 
 # In[3]:
 
-img_size = 512
-max_iter = 500
-show_iter = 50
+img_size = 100
+max_iter = 10
+show_iter = 5
 
 #vgg definition that conveniently let's you grab the outputs from any layer
 class VGG(nn.Module):
@@ -216,14 +216,14 @@ while n_iter[0] <= max_iter:
         n_iter[0]+=1
         #print loss
         if n_iter[0]%show_iter == (show_iter-1):
-            print('Iteration: %d, loss: %f'%(n_iter[0]+1, loss.data[0]))
+            print('Iteration: %d, loss: %f'%(n_iter[0]+1, loss.data.item()))
 #             print([loss_layers[li] + ': ' +  str(l.data[0]) for li,l in enumerate(layer_losses)]) #loss of each layer
         return loss
     
     optimizer.step(closure)
     
 #display result
-out_img = postp(opt_img.data[0].cpu().squeeze())
+out_img = postp(opt_img.data.item().cpu().squeeze())
 # imshow(out_img)
 # show()
 out_img.save("Images/output_image.jpg")

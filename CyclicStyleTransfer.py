@@ -1,5 +1,4 @@
-import time
-import os 
+import os
 image_dir = os.getcwd() + '/Images/'
 model_dir = os.getcwd() + '/Models/'
 
@@ -9,19 +8,18 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import optim
 
-import torchvision
 from torchvision import transforms
 
 from PIL import Image
-from collections import OrderedDict
 
-from matplotlib.pyplot import imshow, show, gcf
+#from matplotlib.pyplot import imshow, show, gcf
 
 # In[3]:
 
 img_size = 512
 max_iter = 500
 show_iter = 50
+save_iter = 50
 
 
 #vgg definition that conveniently let's you grab the outputs from any layer
@@ -166,16 +164,16 @@ style_image, content_image = imgs_torch
 # opt_img = Variable(content_image.data.clone(), requires_grad=True)
 
 # here I initialized my images
-stylized_img = Variable(content_image.data.clone(), requires_grad=True)
-reversed_img = Variable(content_image.data.clone(), requires_grad=True)
+stylized_img = Variable(torch.randn(content_image.size()).type_as(content_image.data), requires_grad=True) #random init
+reversed_img = Variable(torch.randn(content_image.size()).type_as(content_image.data), requires_grad=True) #random init
 
 # In[7]:
 
-"""
+
 #display images
-for img in imgs:
-    imshow(img);show()
-"""
+#for img in imgs:
+#    imshow(img);show()
+
 
 # In[8]:
 
@@ -188,7 +186,7 @@ loss_fns = [GramMSELoss()] * len(style_layers) + [nn.MSELoss()] * len(content_la
 """GramMSELoss() is a "neural network" that takes input and target and computes the MSELoss between Gram Matrix of
 input and target feature map. So loss_fns declared in the above line is a "neural network" """
 """ loss_fns is a "neural network" composed of 5 GramMSELoss() "neural networks" and one MSELoss "neural network". Its inputs 
-are the input and the target layers """
+are the input and the target layers, outputs are the feature maps needed for the loss functions """
 if torch.cuda.is_available():
     loss_fns = [loss_fn.cuda() for loss_fn in loss_fns]
     
@@ -196,7 +194,7 @@ if torch.cuda.is_available():
 """You can define different style weights for different style layers"""
 style_weights = [1e3/n**2 for n in [64,128,256,512,512]]
 content_weights = [1e0]
-similarity_weight = 1 # added a weight for the similarity loss
+similarity_weight = 100000 # added a weight for the similarity loss
 weights = style_weights + content_weights
 
 # compute optimization targets
@@ -214,6 +212,13 @@ optimizer_stylization = optim.LBFGS([stylized_img])
 optimizer_reverse = optim.LBFGS([reversed_img])
 
 n_iter=[0]
+checkpoint = 1
+
+print("Running style transfer ...")
+print("Image size = %d" % img_size)
+print("Max number of iterations = %d" % max_iter)
+print("Chekpoint every %d iterations" % save_iter)
+print("===========================================================================================")
 
 while n_iter[0] <= max_iter:
     """Here I have to redefine a new optimization process, i.e. make clear what my goal is"""
@@ -232,10 +237,9 @@ while n_iter[0] <= max_iter:
 
         # print loss
         if n_iter[0] % show_iter == (show_iter - 1):
-            print('Iteration: %d, loss: %f' % (n_iter[0] + 1, loss.data[0]))
-        #             print([loss_layers[li] + ': ' +  str(l.data[0]) for li,l in enumerate(layer_losses)]) #loss of each layer
+            print('Stylization loss     - Iteration: %d, loss: %f' % (n_iter[0] + 1, loss.data.item()))
+            # print([loss_layers[li] + ': ' +  str(l.data[0]) for li,l in enumerate(layer_losses)]) #loss of each layer
         return loss
-
 
     def closure_reverse():
         optimizer_reverse.zero_grad()
@@ -247,26 +251,36 @@ while n_iter[0] <= max_iter:
         and targets[a] (the feature map that we want to specify in our loss)"""
         """Total loss is the sum of the loss of each layer:"""
         loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_image, reversed_img) # added term for similarity loss
+        loss.backward()
+
+
         #print loss
-        if n_iter[0]%show_iter == (show_iter-1):
-            print('Iteration: %d, loss: %f'%(n_iter[0]+1, loss.data[0]))
+        if n_iter[0] % show_iter == (show_iter-1):
+            print('Reverse Loss         - Iteration: %d, loss: %f'%(n_iter[0] + 1, loss.data.item()))
             # print([loss_layers[li] + ': ' +  str(l.data[0]) for li,l in enumerate(layer_losses)]) #loss of each layer
         return loss
-    
-    optimizer_stylization.step(closure_stylization)
-    optimizer_reverse.step(closure_reverse)
+
+    optimizer_stylization.step(closure=closure_stylization)
+    optimizer_reverse.step(closure=closure_reverse)
+
+    if n_iter[0] % save_iter == (save_iter - 1):
+        st = postp(stylized_img.data[0].cpu().squeeze())
+        st.save("Images/stylized_image_check%d.jpg" % checkpoint)
+        rv = postp(reversed_img.data[0].cpu().squeeze())
+        rv.save("Images/reversed_image_check%d.jpg" % checkpoint)
+        checkpoint += 1
 
     n_iter[0] += 1
-    
+
 # display result
 stylized_img = postp(stylized_img.data[0].cpu().squeeze())
 reversed_img = postp(reversed_img.data[0].cpu().squeeze())
 # imshow(out_img)
 # show()
+
 stylized_img.save("Images/stylized_image.jpg")
 reversed_img.save("Images/reversed_image.jpg")
+# gcf().set_size_inches(10, 10)
 
-# gcf().set_size_inches(10,10)
 
-
-"""Controlling perceptual factors part removed"""
+#Controlling perceptual factors part removed
