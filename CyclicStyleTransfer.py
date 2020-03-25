@@ -17,7 +17,7 @@ from PIL import Image
 # In[3]:
 
 img_size = 512
-max_iter = 500
+max_iter = 300
 show_iter = 50
 save_iter = 50
 
@@ -150,7 +150,7 @@ if torch.cuda.is_available():
 
 # load images, ordered as [style_image, content_image]
 img_dirs = [image_dir, image_dir]
-img_names = ['vangogh_starry_night.jpg', 'Tuebingen_Neckarfront.jpg']
+img_names = ['style_image.jpg', 'content_image.jpg']
 imgs = [Image.open(img_dirs[i] + name) for i,name in enumerate(img_names)]
 imgs_torch = [prep(img) for img in imgs]
 if torch.cuda.is_available():
