@@ -13,10 +13,10 @@ import pytorch_msssim
 
 # In[3]:
 
-img_size = 100
-max_iter = 10
-show_iter = 2
-save_iter = 2
+img_size = 512
+max_iter = 200
+show_iter = 50
+save_iter = 50
 
 # In[4]:
 
