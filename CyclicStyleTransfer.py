@@ -13,10 +13,10 @@ import pytorch_msssim
 
 # In[3]:
 
-img_size = 512
-max_iter = 200
-show_iter = 50
-save_iter = 50
+img_size = 100
+max_iter = 10
+show_iter = 2
+save_iter = 2
 
 # In[4]:
 
@@ -104,7 +104,7 @@ if torch.cuda.is_available():
 """You can define different style weights for different style layers"""
 style_weights = [1e3/n**2 for n in [64,128,256,512,512]]
 content_weights = [1e0]
-similarity_weight = 100000 # added a weight for the similarity loss
+similarity_weight = 1e-8 # added a weight for the similarity loss
 weights = style_weights + content_weights
 
 # compute optimization targets
@@ -143,7 +143,7 @@ while n_iter[0] <= max_iter:
         and targets[a] (the feature map that we want to specify in our loss)"""
         """Total loss is the sum of the loss of each layer:"""
         #loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_image, reversed_img) # added term for similarity loss
-        loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img) # added term for similarity loss
+        loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img, normalize=True) # added term for similarity loss
 
         loss.backward()
 
@@ -163,7 +163,7 @@ while n_iter[0] <= max_iter:
         and targets[a] (the feature map that we want to specify in our loss)"""
         """Total loss is the sum of the loss of each layer:"""
         #loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_image, reversed_img) # added term for similarity loss
-        loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img) # added term for similarity loss
+        loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img, normalize=True) # added term for similarity loss
 
         loss.backward()
 
