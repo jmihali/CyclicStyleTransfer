@@ -8,6 +8,7 @@ from torch import optim
 from PIL import Image
 from helpers import *
 import pytorch_msssim
+from time import perf_counter
 
 #from matplotlib.pyplot import imshow, show, gcf
 
@@ -19,8 +20,6 @@ show_iter = 50
 save_iter = 50
 
 # In[4]:
-
-
 # pre and post processing for images
 
 prep = transforms.Compose([transforms.Resize(img_size),
@@ -80,11 +79,6 @@ reversed_img = Variable(torch.randn(content_image.size()).type_as(content_image.
 # In[7]:
 
 
-#display images
-#for img in imgs:
-#    imshow(img);show()
-
-
 # In[8]:
 
 
@@ -104,7 +98,7 @@ if torch.cuda.is_available():
 """You can define different style weights for different style layers"""
 style_weights = [1e3/n**2 for n in [64,128,256,512,512]]
 content_weights = [1e0]
-similarity_weight = 1e-8 # added a weight for the similarity loss
+similarity_weight = 1e6 # added a weight for the similarity loss
 weights = style_weights + content_weights
 
 # compute optimization targets
@@ -129,6 +123,8 @@ print("Image size = %d" % img_size)
 print("Max number of iterations = %d" % max_iter)
 print("Chekpoint every %d iterations" % save_iter)
 print("===========================================================================================")
+
+t0 = perf_counter()
 
 while n_iter[0] <= max_iter:
     """Here I have to redefine a new optimization process, i.e. make clear what my goal is"""
@@ -167,7 +163,6 @@ while n_iter[0] <= max_iter:
 
         loss.backward()
 
-
         #print loss
         if n_iter[0] % show_iter == (show_iter-1):
             print('Reverse Loss         - Iteration: %d, loss: %f'%(n_iter[0] + 1, loss.data.item()))
@@ -186,15 +181,12 @@ while n_iter[0] <= max_iter:
 
     n_iter[0] += 1
 
+t1 = perf_counter()
+
 # display result
 stylized_img = postp(stylized_img.data[0].cpu().squeeze())
 reversed_img = postp(reversed_img.data[0].cpu().squeeze())
-# imshow(out_img)
-# show()
+print("Total execution time: %f" % (t1 - t0))
 
-stylized_img.save("Images/stylized_image.jpg")
-reversed_img.save("Images/reversed_image.jpg")
-# gcf().set_size_inches(10, 10)
-
-
-#Controlling perceptual factors part removed
+stylized_img.save("Images/cst_stylized_image.jpg")
+reversed_img.save("Images/cst_reversed_image.jpg")

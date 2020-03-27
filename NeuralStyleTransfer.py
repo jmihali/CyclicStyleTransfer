@@ -1,15 +1,11 @@
 import os
 image_dir = os.getcwd() + '/Images/'
 model_dir = os.getcwd() + '/Models/'
-
-import torch
 from torch.autograd import Variable
-import torch.nn as nn
 from torch import optim
 from PIL import Image
 from helpers import *
-
-#from matplotlib.pyplot import imshow, show, gcf
+from time import perf_counter
 
 # In[3]:
 
@@ -19,7 +15,6 @@ show_iter = 50
 
 
 # In[4]:
-
 
 # pre and post processing for images
 
@@ -113,7 +108,9 @@ targets = style_targets + content_targets
 
 optimizer = optim.LBFGS([opt_img]); """Optimizer is defined on opt_image, i.e. the pixels of opt_image are the "parameters"
                                     of the network that needs to be optimized through LBFGS"""
-n_iter=[0]
+n_iter = [0]
+
+t0 = perf_counter()
 
 while n_iter[0] <= max_iter:
     """Here I have to redefine a new optimization process, i.e. make clear what my goal is"""
@@ -136,13 +133,12 @@ while n_iter[0] <= max_iter:
         return loss
     
     optimizer.step(closure)
-    
+
+t1 = perf_counter()
+
+print("Total execution time: %f" % (t1 - t0))
+
+
 #display result
 out_img = postp(opt_img.data[0].cpu().squeeze())
-# imshow(out_img)
-# show()
 out_img.save("Images/nss_out_image.jpg")
-#gcf().set_size_inches(10,10)
-
-
-"""Controlling perceptual factors part removed"""
