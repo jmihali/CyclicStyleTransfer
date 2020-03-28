@@ -12,10 +12,10 @@ from time import perf_counter
 
 # In[3]:
 
-img_size = 100
-max_iter = 20
-show_iter = 2
-save_iter = 2
+img_size = 512
+max_iter = 200
+show_iter = 50
+save_iter = 50
 #similarity_type = 'msssim'
 similarity_type = 'mse'
 similarity_weight = 1e3 # added a weight for the similarity loss
@@ -175,8 +175,7 @@ while n_iter[0] <= max_iter:
             if similarity_type == 'mse':
                 loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_image, reversed_img)  # added term for similarity loss
             elif similarity_type == 'mssim':
-                loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img,
-                                                                                     normalize=True)  # added term for similarity loss
+                loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img, normalize=True)  # added term for similarity loss
         except:
             print("Selected similarity loss function does not exist")
 
