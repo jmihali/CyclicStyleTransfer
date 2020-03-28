@@ -10,14 +10,15 @@ from helpers import *
 import pytorch_msssim
 from time import perf_counter
 
-#from matplotlib.pyplot import imshow, show, gcf
-
 # In[3]:
 
-img_size = 512
-max_iter = 200
-show_iter = 50
-save_iter = 50
+img_size = 100
+max_iter = 20
+show_iter = 2
+save_iter = 2
+#similarity_type = 'msssim'
+similarity_type = 'mse'
+similarity_weight = 1e3 # added a weight for the similarity loss
 
 # In[4]:
 # pre and post processing for images
@@ -98,7 +99,7 @@ if torch.cuda.is_available():
 """You can define different style weights for different style layers"""
 style_weights = [1e3/n**2 for n in [64,128,256,512,512]]
 content_weights = [1e0]
-similarity_weight = 1e6 # added a weight for the similarity loss
+
 weights = style_weights + content_weights
 
 # compute optimization targets
@@ -118,10 +119,17 @@ optimizer_reverse = optim.LBFGS([reversed_img])
 n_iter=[0]
 checkpoint = 1
 
-print("Running style transfer ...")
+print("Running cyclic style transfer on ", os.uname()[1])
 print("Image size = %d" % img_size)
 print("Max number of iterations = %d" % max_iter)
+print("Show result every %d iterations" % show_iter)
 print("Chekpoint every %d iterations" % save_iter)
+print("Content layer(s):", content_layers)
+print("Content weight(s):", content_weights)
+print("Style layer(s):", style_layers)
+print("Style weight(s):", style_weights)
+print("Similarity weight:", similarity_weight)
+print("Similarity loss type: ", similarity_type)
 print("===========================================================================================")
 
 t0 = perf_counter()
@@ -138,8 +146,13 @@ while n_iter[0] <= max_iter:
         """You take the first loss function, multiply it by its weight, its inputs are A (the image that is going to be optimized)
         and targets[a] (the feature map that we want to specify in our loss)"""
         """Total loss is the sum of the loss of each layer:"""
-        #loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_image, reversed_img) # added term for similarity loss
-        loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img, normalize=True) # added term for similarity loss
+        try:
+            if similarity_type == 'mse':
+                loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_image, reversed_img) # added term for similarity loss
+            elif similarity_type == 'mssim':
+                loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img, normalize=True) # added term for similarity loss
+        except:
+            print("Selected similarity loss function does not exist")
 
         loss.backward()
 
@@ -158,8 +171,14 @@ while n_iter[0] <= max_iter:
         """You take the first loss function, multiply it by its weight, its inputs are A (the image that is going to be optimized)
         and targets[a] (the feature map that we want to specify in our loss)"""
         """Total loss is the sum of the loss of each layer:"""
-        #loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_image, reversed_img) # added term for similarity loss
-        loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img, normalize=True) # added term for similarity loss
+        try:
+            if similarity_type == 'mse':
+                loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_image, reversed_img)  # added term for similarity loss
+            elif similarity_type == 'mssim':
+                loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img,
+                                                                                     normalize=True)  # added term for similarity loss
+        except:
+            print("Selected similarity loss function does not exist")
 
         loss.backward()
 
@@ -174,9 +193,9 @@ while n_iter[0] <= max_iter:
 
     if n_iter[0] % save_iter == (save_iter - 1):
         st = postp(stylized_img.data[0].cpu().squeeze())
-        st.save("Images/stylized_image_check%d.jpg" % checkpoint)
+        st.save("Images/cst_stylized_image_check%d.jpg" % checkpoint)
         rv = postp(reversed_img.data[0].cpu().squeeze())
-        rv.save("Images/reversed_image_check%d.jpg" % checkpoint)
+        rv.save("Images/cst_reversed_image_check%d.jpg" % checkpoint)
         checkpoint += 1
 
     n_iter[0] += 1

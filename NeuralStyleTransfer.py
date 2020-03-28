@@ -105,6 +105,16 @@ targets = style_targets + content_targets
 # In[9]:
 
 #run style transfer
+print("Running neural style transfer on ", os.uname()[1])
+print("Image size = %d" % img_size)
+print("Max number of iterations = %d" % max_iter)
+print("Show result every %d iterations" % show_iter)
+print("Content layer(s):", content_layers)
+print("Content weight(s):", content_weights)
+print("Style layer(s):", style_layers)
+print("Style weight(s):", style_weights)
+print("===========================================================================================")
+
 
 optimizer = optim.LBFGS([opt_img]); """Optimizer is defined on opt_image, i.e. the pixels of opt_image are the "parameters"
                                     of the network that needs to be optimized through LBFGS"""
