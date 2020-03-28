@@ -18,7 +18,7 @@ show_iter = 50
 save_iter = 50
 #similarity_type = 'msssim'
 similarity_type = 'mse'
-similarity_weight = 1e3 # added a weight for the similarity loss
+similarity_weight = 1e5 # added a weight for the similarity loss
 
 # In[4]:
 # pre and post processing for images
@@ -98,7 +98,7 @@ if torch.cuda.is_available():
 # these are good weights settings:
 """You can define different style weights for different style layers"""
 style_weights = [1e3/n**2 for n in [64,128,256,512,512]]
-content_weights = [1e0]
+content_weights = [1e2]
 
 weights = style_weights + content_weights
 
@@ -119,7 +119,7 @@ optimizer_reverse = optim.LBFGS([reversed_img])
 n_iter=[0]
 checkpoint = 1
 
-print("Running cyclic style transfer on ", os.uname()[1])
+print("Running cyclic style transfer 2 on ", os.uname()[1])
 print("Image size = %d" % img_size)
 print("Max number of iterations = %d" % max_iter)
 print("Show result every %d iterations" % show_iter)
@@ -134,7 +134,7 @@ print("=========================================================================
 
 t0 = perf_counter()
 
-while n_iter[0] <= max_iter:
+while n_iter[0] <= 2*max_iter:
     """Here I have to redefine a new optimization process, i.e. make clear what my goal is"""
 
     def closure_stylization():
@@ -155,6 +155,7 @@ while n_iter[0] <= max_iter:
             print("Selected similarity loss function does not exist")
 
         loss.backward()
+        n_iter[0] += 1
 
         # print loss
         if n_iter[0] % show_iter == (show_iter - 1):
@@ -180,6 +181,7 @@ while n_iter[0] <= max_iter:
             print("Selected similarity loss function does not exist")
 
         loss.backward()
+        n_iter[0] += 1
 
         #print loss
         if n_iter[0] % show_iter == (show_iter-1):
@@ -196,8 +198,6 @@ while n_iter[0] <= max_iter:
         rv = postp(reversed_img.data[0].cpu().squeeze())
         rv.save("Images/cst_reversed_image_check%d.jpg" % checkpoint)
         checkpoint += 1
-
-    n_iter[0] += 1
 
 t1 = perf_counter()
 
