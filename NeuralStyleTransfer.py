@@ -13,6 +13,11 @@ img_size = 512
 max_iter = 200
 show_iter = 50
 
+style_weights = [1e3/n**2 for n in [64,128,256,512,512]]
+content_weights = [10]
+#define layers, loss functions, weights and compute optimization targets
+style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
+content_layers = ['r42']
 
 # In[4]:
 
@@ -78,9 +83,7 @@ for img in imgs:
 # In[8]:
 
 
-#define layers, loss functions, weights and compute optimization targets
-style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
-content_layers = ['r42']
+
 loss_layers = style_layers + content_layers
 loss_fns = [GramMSELoss()] * len(style_layers) + [nn.MSELoss()] * len(content_layers)
 """GramMSELoss() is a "neural network" that takes input and target and computes the MSELoss between Gram Matrix of
@@ -92,8 +95,7 @@ if torch.cuda.is_available():
     
 #these are good weights settings:
 """You can define different style weights for different style layers"""
-style_weights = [1e3/n**2 for n in [64,128,256,512,512]]
-content_weights = [1e0]
+
 weights = style_weights + content_weights
 
 #compute optimization targets
