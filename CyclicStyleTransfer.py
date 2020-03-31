@@ -62,12 +62,12 @@ if torch.cuda.is_available():
 # run style transfer
 def run_cyclic_style_transfer(content_layers=content_layers, content_weights=content_weights, style_layers=style_layers,
                        style_weights=style_weights, similarity_type=similarity_type, similarity_weight=similarity_weight,
-                       max_iter=max_iter, show_iter=show_iter, swap_conent_style=False, add_index=False):
+                       max_iter=max_iter, show_iter=show_iter, swap_content_style=False, add_index=False):
 
     global cnt
     # load images, ordered as [style_image, content_image]
     img_dirs = [image_dir, image_dir]
-    if swap_conent_style:
+    if swap_content_style:
         img_names = ['content_image.jpg', 'style_image.jpg']
     else:
         img_names = ['style_image.jpg', 'content_image.jpg']
@@ -126,7 +126,7 @@ def run_cyclic_style_transfer(content_layers=content_layers, content_weights=con
     print("Style weight(s):", style_weights)
     print("Similarity weight:", similarity_weight)
     print("Similarity loss type: ", similarity_type)
-    print("===========================================================================================")
+    print("\n\n")
 
     t0 = perf_counter()
 
@@ -192,6 +192,8 @@ def run_cyclic_style_transfer(content_layers=content_layers, content_weights=con
     stylized_img = postp(stylized_img.data[0].cpu().squeeze())
     reversed_img = postp(reversed_img.data[0].cpu().squeeze())
     print("Total execution time: %f" % (t1 - t0))
+    print("===========================================================================================")
+    print("\n\n")
 
     if add_index:
         stylized_img.save("Images/cst_stylized_image%d.jpg" % cnt)
