@@ -12,15 +12,20 @@ img_size = 512
 max_iter = 200
 show_iter = 50
 
+#similarity_tyle = content
 #similarity_type = 'msssim'
 similarity_type = 'mse'
-similarity_weight = 1e4 # added a weight for the similarity loss
+similarity_weight = 1 # added a weight for the similarity loss
 
 style_weights = [1e3/n**2 for n in [64,128,256,512,512]]
 style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
 
-content_weights = [100]
+content_weights = [1]
 content_layers = ['r42']
+similarity_layer = ['r42']
+
+content_image_name='content_image.jpg'
+style_image_name = 'style_image.jpg'
 
 cnt = 1
 
@@ -60,17 +65,18 @@ if torch.cuda.is_available():
 
 
 # run style transfer
-def run_cyclic_style_transfer(content_layers=content_layers, content_weights=content_weights, style_layers=style_layers,
-                       style_weights=style_weights, similarity_type=similarity_type, similarity_weight=similarity_weight,
-                       max_iter=max_iter, show_iter=show_iter, swap_content_style=False, add_index=False):
+def run_cyclic_style_transfer(content_image_name=content_image_name, style_image_name=style_image_name, content_layers=content_layers, content_weights=content_weights, style_layers=style_layers,
+                                style_weights=style_weights, similarity_type=similarity_type, similarity_layer=similarity_layer,
+                                similarity_weight=similarity_weight, max_iter=max_iter, show_iter=show_iter, swap_content_style=False,
+                              add_index=False):
 
     global cnt
     # load images, ordered as [style_image, content_image]
     img_dirs = [image_dir, image_dir]
     if swap_content_style:
-        img_names = ['content_image.jpg', 'style_image.jpg']
+        img_names = [content_image_name, style_image_name]
     else:
-        img_names = ['style_image.jpg', 'content_image.jpg']
+        img_names = [style_image_name, content_image_name]
     imgs = [Image.open(img_dirs[i] + name) for i, name in enumerate(img_names)]
     imgs_torch = [prep(img) for img in imgs]
     if torch.cuda.is_available():
@@ -110,6 +116,10 @@ def run_cyclic_style_transfer(content_layers=content_layers, content_weights=con
     optimizer_stylization = optim.LBFGS([stylized_img])
     optimizer_reverse = optim.LBFGS([reversed_img])
 
+    if (similarity_type != 'mse' and similarity_type != 'mssim' and similarity_type != 'content'):
+        print("Chosen similarity type does not exist. Automatically set to mse")
+        similarity_type = 'mse'
+
     n_iter = [0]
     checkpoint = 1
 
@@ -117,6 +127,8 @@ def run_cyclic_style_transfer(content_layers=content_layers, content_weights=con
         print("Running cyclic style transfer %d on " % cnt, os.uname()[1])
     else:
         print("Running cyclic style transfer on ", os.uname()[1])
+    print("Content image name:", content_image_name)
+    print("Style image name:", style_image_name)
     print("Image size = %d" % img_size)
     print("Max number of iterations = %d" % max_iter)
     print("Show result every %d iterations" % show_iter)
@@ -141,13 +153,18 @@ def run_cyclic_style_transfer(content_layers=content_layers, content_weights=con
             """You take the first loss function, multiply it by its weight, its inputs are A (the image that is going to be optimized)
             and targets[a] (the feature map that we want to specify in our loss)"""
             """Total loss is the sum of the loss of each layer:"""
-            try:
-                if similarity_type == 'mse':
-                    loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_image, reversed_img) # added term for similarity loss
-                elif similarity_type == 'mssim':
-                    loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img, normalize=True) # added term for similarity loss
-            except:
-                print("Selected similarity loss function does not exist")
+
+            if similarity_type == 'mse':
+                loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_image, reversed_img) # added term for similarity loss
+            elif similarity_type == 'mssim':
+                loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img, normalize=True) # added term for similarity loss
+            elif similarity_type == 'content':
+                layer_losses = [weights[a] * loss_fns[a](A, targets[a]) for a, A in enumerate(out)]
+
+                # extract high level feature maps for the content image and the reversed image
+                content_fm = vgg(content_image, similarity_layer)[0]
+                reversed_fm = vgg(reversed_img, similarity_layer)[0]
+                loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_fm, reversed_fm) # added term for high level content similarity loss
 
             loss.backward()
             n_iter[0] += 1
@@ -167,13 +184,17 @@ def run_cyclic_style_transfer(content_layers=content_layers, content_weights=con
             """You take the first loss function, multiply it by its weight, its inputs are A (the image that is going to be optimized)
             and targets[a] (the feature map that we want to specify in our loss)"""
             """Total loss is the sum of the loss of each layer:"""
-            try:
-                if similarity_type == 'mse':
-                    loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_image, reversed_img)  # added term for similarity loss
-                elif similarity_type == 'mssim':
-                    loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img, normalize=True)  # added term for similarity loss
-            except:
-                print("Selected similarity loss function does not exist")
+
+            if similarity_type == 'mse':
+                loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_image, reversed_img) # added term for similarity loss
+            elif similarity_type == 'mssim':
+                loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img, normalize=True) # added term for similarity loss
+            elif similarity_type == 'content':
+                # extract high level feature maps for the content image and the reversed image
+                content_fm = vgg(content_image, similarity_layer)[0]
+                reversed_fm = vgg(reversed_img, similarity_layer)[0]
+                loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_fm, reversed_fm) # added term for high level content similarity loss
+
 
             loss.backward()
             n_iter[0] += 1
