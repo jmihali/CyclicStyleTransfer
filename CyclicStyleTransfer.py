@@ -8,11 +8,16 @@ from helpers import *
 import pytorch_msssim
 from time import perf_counter
 
+import torch
+from PerceptualSimilarity.util import util
+import PerceptualSimilarity.models as models
+
 img_size = 512
 max_iter = 200
 show_iter = 50
 
-#similarity_tyle = content
+#similarity_type = 'lpsis'
+#similarity_type = 'content'
 #similarity_type = 'msssim'
 similarity_type = 'mse'
 similarity_weight = 1 # added a weight for the similarity loss
@@ -26,6 +31,8 @@ similarity_layer = ['r42']
 
 content_image_name='content_image.jpg'
 style_image_name = 'style_image.jpg'
+
+output_dir = 'Images' # start without / and end without /
 
 cnt = 1
 
@@ -68,7 +75,7 @@ if torch.cuda.is_available():
 def run_cyclic_style_transfer(content_image_name=content_image_name, style_image_name=style_image_name, content_layers=content_layers, content_weights=content_weights, style_layers=style_layers,
                                 style_weights=style_weights, similarity_type=similarity_type, similarity_layer=similarity_layer,
                                 similarity_weight=similarity_weight, max_iter=max_iter, show_iter=show_iter, swap_content_style=False,
-                              add_index=False):
+                              add_index=False, output_dir=output_dir):
 
     global cnt
     # load images, ordered as [style_image, content_image]
@@ -116,9 +123,13 @@ def run_cyclic_style_transfer(content_image_name=content_image_name, style_image
     optimizer_stylization = optim.LBFGS([stylized_img])
     optimizer_reverse = optim.LBFGS([reversed_img])
 
-    if (similarity_type != 'mse' and similarity_type != 'mssim' and similarity_type != 'content'):
+    if (similarity_type not in ('mse', 'mssim', 'content', 'lpsis')):
         print("Chosen similarity type does not exist. Automatically set to mse")
         similarity_type = 'mse'
+
+    if similarity_type == 'lpsis':
+        lpsis_model = models.PerceptualLoss(model='net-lin', net='alex', use_gpu=torch.cuda.is_available(),
+                                            spatial=False)
 
     n_iter = [0]
     checkpoint = 1
@@ -160,11 +171,15 @@ def run_cyclic_style_transfer(content_image_name=content_image_name, style_image
                 loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img, normalize=True) # added term for similarity loss
             elif similarity_type == 'content':
                 layer_losses = [weights[a] * loss_fns[a](A, targets[a]) for a, A in enumerate(out)]
-
                 # extract high level feature maps for the content image and the reversed image
                 content_fm = vgg(content_image, similarity_layer)[0]
                 reversed_fm = vgg(reversed_img, similarity_layer)[0]
                 loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_fm, reversed_fm) # added term for high level content similarity loss
+
+            elif similarity_type == 'lpsis':
+                sim_loss = lpsis_model.forward(stylized_img, reversed_img)
+                loss = sum(layer_losses) + similarity_weight * sim_loss # added term for similarity loss
+
 
             loss.backward()
             n_iter[0] += 1
@@ -195,6 +210,10 @@ def run_cyclic_style_transfer(content_image_name=content_image_name, style_image
                 reversed_fm = vgg(reversed_img, similarity_layer)[0]
                 loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_fm, reversed_fm) # added term for high level content similarity loss
 
+            elif similarity_type == 'lpsis':
+                sim_loss = lpsis_model.forward(stylized_img, reversed_img)
+                loss = sum(layer_losses) + similarity_weight * sim_loss # added term for similarity loss
+
 
             loss.backward()
             n_iter[0] += 1
@@ -217,9 +236,9 @@ def run_cyclic_style_transfer(content_image_name=content_image_name, style_image
     print("\n\n")
 
     if add_index:
-        stylized_img.save("Images/cst_stylized_image%d.jpg" % cnt)
-        reversed_img.save("Images/cst_reversed_image%d.jpg" % cnt)
+        stylized_img.save("%s/cst_stylized_image%d.jpg" % (output_dir, cnt))
+        reversed_img.save("%s/cst_reversed_image%d.jpg" % cnt)
         cnt += 1
     else:
-        stylized_img.save("Images/cst_stylized_image.jpg")
-        reversed_img.save("Images/cst_reversed_image.jpg")
+        stylized_img.save("%s/cst_stylized_image.jpg" % output_dir)
+        reversed_img.save("%s/cst_reversed_image.jpg" % output_dir)
