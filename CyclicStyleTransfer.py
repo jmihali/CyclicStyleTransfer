@@ -237,7 +237,7 @@ def run_cyclic_style_transfer(content_image_name=content_image_name, style_image
 
     if add_index:
         stylized_img.save("%s/cst_stylized_image%d.jpg" % (output_dir, cnt))
-        reversed_img.save("%s/cst_reversed_image%d.jpg" % cnt)
+        reversed_img.save("%s/cst_reversed_image%d.jpg" % (output_dir, cnt))
         cnt += 1
     else:
         stylized_img.save("%s/cst_stylized_image.jpg" % output_dir)
