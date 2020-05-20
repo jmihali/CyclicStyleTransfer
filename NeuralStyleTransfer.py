@@ -1,18 +1,18 @@
 import os
-image_dir = os.getcwd() + '/Images/'
-model_dir = os.getcwd() + '/Models/'
 from torch.autograd import Variable
 from torch import optim
 from PIL import Image
 from helpers import *
 from time import perf_counter
 
+image_dir = os.getcwd() + '/Images/'
+model_dir = os.getcwd() + '/Models/'
 
-
-img_size = 100
-max_iter = 2
+img_size = 512
+max_iter = 200
 show_iter = 50
 
+# Specify the default arguments for the style transfer function
 style_weights = [1e3/n**2 for n in [64,128,256,512,512]]
 style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
 
@@ -85,10 +85,6 @@ def run_neural_style_transfer(content_image_name=content_image_name, style_image
 
     loss_layers = style_layers + content_layers
     loss_fns = [GramMSELoss()] * len(style_layers) + [nn.MSELoss()] * len(content_layers)
-    """GramMSELoss() is a "neural network" that takes input and target and computes the MSELoss between Gram Matrix of
-    input and target feature map. So loss_fns declared in the above line is a "neural network" """
-    """ loss_fns is a "neural network" composed of 5 GramMSELoss() "neural networks" and one MSELoss "neural network". Its inputs 
-    are the input and the target layers """
     if torch.cuda.is_available():
         loss_fns = [loss_fn.cuda() for loss_fn in loss_fns]
 
@@ -114,30 +110,23 @@ def run_neural_style_transfer(content_image_name=content_image_name, style_image
     print("\n\n")
 
 
-    optimizer = optim.LBFGS([opt_img]); """Optimizer is defined on opt_image, i.e. the pixels of opt_image are the "parameters"
-                                        of the network that needs to be optimized through LBFGS"""
+    optimizer = optim.LBFGS([opt_img]);
+
     n_iter = [0]
 
     t0 = perf_counter()
 
     while n_iter[0] <= max_iter:
-        """Here I have to redefine a new optimization process, i.e. make clear what my goal is"""
         def closure():
             optimizer.zero_grad()
-            """Outputs the feature maps for the loss_layers=content_layers+style_layers:"""
             out = vgg(opt_img, loss_layers)
-            """Calculates the loss for each layer:"""
             layer_losses = [weights[a] * loss_fns[a](A, targets[a]) for a,A in enumerate(out)]
-            """You take the first loss function, multiply it by its weight, its inputs are A (the image that is going to be optimized)
-            and targets[a] (the feature map that we want to specify in our loss)"""
-            """Total loss is the sum of the loss of each layer:"""
             loss = sum(layer_losses)
             loss.backward()
             n_iter[0]+=1
             #print loss
             if n_iter[0]%show_iter == (show_iter-1):
                 print('Iteration: %d, loss: %f'%(n_iter[0]+1, loss.data.item()))
-    #             print([loss_layers[li] + ': ' +  str(l.data[0]) for li,l in enumerate(layer_losses)]) #loss of each layer
             return loss
 
         optimizer.step(closure)
@@ -151,7 +140,11 @@ def run_neural_style_transfer(content_image_name=content_image_name, style_image
     out_img = postp(opt_img.data[0].cpu().squeeze())
 
     if add_index:
-        out_img.save("%s/nst_stylized_image%d.jpg" % (output_dir, cnt))
+        out_img_path = "%s/nst_stylized_image%d.jpg" % (output_dir, cnt)
         cnt += 1
     else:
-        out_img.save("%s/nst_stylized_image.jpg" % output_dir)
+        out_img_path = "%s/nst_stylized_image.jpg" % output_dir
+
+    out_img.save(out_img_path)
+    return out_img_path
+

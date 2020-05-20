@@ -1,35 +1,33 @@
 import os
-image_dir = os.getcwd() + '/Images/'
-model_dir = os.getcwd() + '/Models/'
 from torch.autograd import Variable
 from torch import optim
 from PIL import Image
 from helpers import *
-import pytorch_msssim
 from time import perf_counter
-
+from torchvision.transforms import ToTensor
 import torch
-from PerceptualSimilarity.util import util
-import PerceptualSimilarity.models as models
+
+image_dir = os.getcwd() + '/Images/'
+model_dir = os.getcwd() + '/Models/'
 
 img_size = 512
 max_iter = 200
 show_iter = 50
 
-#similarity_type = 'lpsis'
-#similarity_type = 'content'
-#similarity_type = 'msssim'
-similarity_type = 'mse'
-similarity_weight = 1 # added a weight for the similarity loss
+# Specify the default arguments for the style transfer function
+similarity_type_weight = {
+    'mse' : 10,
+    'content' : 0,
+}
 
 style_weights = [1e3/n**2 for n in [64,128,256,512,512]]
 style_layers = ['r11', 'r21', 'r31', 'r41', 'r51']
 
 content_weights = [1]
 content_layers = ['r42']
-similarity_layer = ['r42']
+similarity_layer = ['r42'] # only needed for 'content' loss
 
-content_image_name='content_image.jpg'
+content_image_name = 'content_image.jpg'
 style_image_name = 'style_image.jpg'
 
 output_dir = 'Images' # start without / and end without /
@@ -73,8 +71,8 @@ if torch.cuda.is_available():
 
 # run style transfer
 def run_cyclic_style_transfer(content_image_name=content_image_name, style_image_name=style_image_name, content_layers=content_layers, content_weights=content_weights, style_layers=style_layers,
-                                style_weights=style_weights, similarity_type=similarity_type, similarity_layer=similarity_layer,
-                                similarity_weight=similarity_weight, max_iter=max_iter, show_iter=show_iter, swap_content_style=False,
+                                style_weights=style_weights, similarity_type_weight=similarity_type_weight, similarity_layer=similarity_layer,
+                                max_iter=max_iter, show_iter=show_iter, swap_content_style=False,
                               add_index=False, output_dir=output_dir):
 
     global cnt
@@ -94,10 +92,7 @@ def run_cyclic_style_transfer(content_image_name=content_image_name, style_image
 
     loss_layers = style_layers + content_layers
     loss_fns = [GramMSELoss()] * len(style_layers) + [nn.MSELoss()] * len(content_layers)
-    """GramMSELoss() is a "neural network" that takes input and target and computes the MSELoss between Gram Matrix of
-    input and target feature map. So loss_fns declared in the above line is a "neural network" """
-    """ loss_fns is a "neural network" composed of 5 GramMSELoss() "neural networks" and one MSELoss "neural network". Its inputs 
-    are the input and the target layers, outputs are the feature maps needed for the loss functions """
+
     if torch.cuda.is_available():
         loss_fns = [loss_fn.cuda() for loss_fn in loss_fns]
 
@@ -108,31 +103,14 @@ def run_cyclic_style_transfer(content_image_name=content_image_name, style_image
     content_targets = [A.detach() for A in vgg(content_image, content_layers)]
     targets = style_targets + content_targets
 
-    # initialize images:
+    # initialize images randomly:
+    stylized_img = Variable(torch.randn(content_image.size()).type_as(content_image.data), requires_grad=True)  # random init
+    reversed_img = Variable(torch.randn(content_image.size()).type_as(content_image.data), requires_grad=True)  # random init
 
-    # stylized_img = Variable(torch.randn(content_image.size()).type_as(content_image.data), requires_grad=True) #random init
-    # reversed_img = Variable(content_image.data.clone(), requires_grad=True)
-
-    stylized_img = Variable(torch.randn(content_image.size()).type_as(content_image.data),
-                            requires_grad=True)  # random init
-    reversed_img = Variable(torch.randn(content_image.size()).type_as(content_image.data),
-                            requires_grad=True)  # random init
-
-    """Optimizer is defined on opt_image, i.e. the pixels of opt_image are the "parameters" of the network that needs to 
-    be optimized through LBFGS """
     optimizer_stylization = optim.LBFGS([stylized_img])
     optimizer_reverse = optim.LBFGS([reversed_img])
 
-    if (similarity_type not in ('mse', 'mssim', 'content', 'lpsis')):
-        print("Chosen similarity type does not exist. Automatically set to mse")
-        similarity_type = 'mse'
-
-    if similarity_type == 'lpsis':
-        lpsis_model = models.PerceptualLoss(model='net-lin', net='alex', use_gpu=torch.cuda.is_available(),
-                                            spatial=False)
-
     n_iter = [0]
-    checkpoint = 1
 
     if add_index:
         print("Running cyclic style transfer %d on " % cnt, os.uname()[1])
@@ -147,8 +125,7 @@ def run_cyclic_style_transfer(content_image_name=content_image_name, style_image
     print("Content weight(s):", content_weights)
     print("Style layer(s):", style_layers)
     print("Style weight(s):", style_weights)
-    print("Similarity weight:", similarity_weight)
-    print("Similarity loss type: ", similarity_type)
+    print("Similarity type(s) and weight(s):", similarity_type_weight)
     print("\n\n")
 
     t0 = perf_counter()
@@ -157,29 +134,19 @@ def run_cyclic_style_transfer(content_image_name=content_image_name, style_image
 
         def closure_stylization():
             optimizer_stylization.zero_grad()
-            """Outputs the feature maps for the loss_layers=content_layers+style_layers:"""
             out = vgg(stylized_img, loss_layers)
-            """Calculates the loss for each layer:"""
             layer_losses = [weights[a] * loss_fns[a](A, targets[a]) for a, A in enumerate(out)]
-            """You take the first loss function, multiply it by its weight, its inputs are A (the image that is going to be optimized)
-            and targets[a] (the feature map that we want to specify in our loss)"""
-            """Total loss is the sum of the loss of each layer:"""
 
-            if similarity_type == 'mse':
-                loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_image, reversed_img) # added term for similarity loss
-            elif similarity_type == 'mssim':
-                loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img, normalize=True) # added term for similarity loss
-            elif similarity_type == 'content':
-                layer_losses = [weights[a] * loss_fns[a](A, targets[a]) for a, A in enumerate(out)]
+            sim_loss = 0
+            if 'mse' in similarity_type_weight.keys():
+                sim_loss += similarity_type_weight['mse']*nn.MSELoss()(content_image, reversed_img) # added term for similarity loss
+            if 'content' in similarity_type_weight.keys():
                 # extract high level feature maps for the content image and the reversed image
                 content_fm = vgg(content_image, similarity_layer)[0]
                 reversed_fm = vgg(reversed_img, similarity_layer)[0]
-                loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_fm, reversed_fm) # added term for high level content similarity loss
+                sim_loss += similarity_type_weight['content']*nn.MSELoss()(content_fm, reversed_fm) # added term for high level content similarity loss
 
-            elif similarity_type == 'lpsis':
-                sim_loss = lpsis_model.forward(stylized_img, reversed_img)
-                loss = sum(layer_losses) + similarity_weight * sim_loss # added term for similarity loss
-
+            loss = sum(layer_losses) + sim_loss # added term for similarity loss
 
             loss.backward()
             n_iter[0] += 1
@@ -187,33 +154,23 @@ def run_cyclic_style_transfer(content_image_name=content_image_name, style_image
             # print loss
             if n_iter[0] % show_iter == (show_iter - 1):
                 print('Stylization loss     - Iteration: %d, loss: %f' % (n_iter[0] + 1, loss.data.item()))
-                # print([loss_layers[li] + ': ' +  str(l.data[0]) for li,l in enumerate(layer_losses)]) #loss of each layer
             return loss
 
         def closure_reverse():
             optimizer_reverse.zero_grad()
-            """Outputs the feature maps for the loss_layers=content_layers+style_layers:"""
             out = vgg(reversed_img, loss_layers)
-            """Calculates the loss for each layer:"""
             layer_losses = [weights[a] * loss_fns[a](A, targets[a]) for a,A in enumerate(out)]
-            """You take the first loss function, multiply it by its weight, its inputs are A (the image that is going to be optimized)
-            and targets[a] (the feature map that we want to specify in our loss)"""
-            """Total loss is the sum of the loss of each layer:"""
 
-            if similarity_type == 'mse':
-                loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_image, reversed_img) # added term for similarity loss
-            elif similarity_type == 'mssim':
-                loss = sum(layer_losses) + similarity_weight * pytorch_msssim.msssim(content_image, reversed_img, normalize=True) # added term for similarity loss
-            elif similarity_type == 'content':
+            sim_loss = 0
+            if 'mse' in similarity_type_weight.keys():
+                sim_loss += similarity_type_weight['mse']*nn.MSELoss()(content_image, reversed_img) # added term for similarity loss
+            if 'content' in similarity_type_weight.keys():
                 # extract high level feature maps for the content image and the reversed image
                 content_fm = vgg(content_image, similarity_layer)[0]
                 reversed_fm = vgg(reversed_img, similarity_layer)[0]
-                loss = sum(layer_losses) + similarity_weight * nn.MSELoss()(content_fm, reversed_fm) # added term for high level content similarity loss
+                sim_loss += similarity_type_weight['content']*nn.MSELoss()(content_fm, reversed_fm) # added term for high level content similarity loss
 
-            elif similarity_type == 'lpsis':
-                sim_loss = lpsis_model.forward(stylized_img, reversed_img)
-                loss = sum(layer_losses) + similarity_weight * sim_loss # added term for similarity loss
-
+            loss = sum(layer_losses) + sim_loss # added term for similarity loss
 
             loss.backward()
             n_iter[0] += 1
@@ -221,7 +178,6 @@ def run_cyclic_style_transfer(content_image_name=content_image_name, style_image
             #print loss
             if n_iter[0] % show_iter == (show_iter-1):
                 print('Reverse Loss         - Iteration: %d, loss: %f'%(n_iter[0] + 1, loss.data.item()))
-                # print([loss_layers[li] + ': ' +  str(l.data[0]) for li,l in enumerate(layer_losses)]) #loss of each layer
             return loss
 
         optimizer_stylization.step(closure=closure_stylization)
@@ -232,7 +188,7 @@ def run_cyclic_style_transfer(content_image_name=content_image_name, style_image
     stylized_img = postp(stylized_img.data[0].cpu().squeeze())
     reversed_img = postp(reversed_img.data[0].cpu().squeeze())
     print("Total execution time: %f" % (t1 - t0))
-    print("===========================================================================================")
+    #print("===========================================================================================")
     print("\n\n")
 
     if add_index:
@@ -242,3 +198,23 @@ def run_cyclic_style_transfer(content_image_name=content_image_name, style_image
     else:
         stylized_img.save("%s/cst_stylized_image.jpg" % output_dir)
         reversed_img.save("%s/cst_reversed_image.jpg" % output_dir)
+
+
+def MSELoss_images(img1_path, img2_path):
+    img1 = ToTensor()(Image.open(img1_path))
+    img2 = ToTensor()(Image.open(img2_path))
+    img1 = Variable(img1.unsqueeze(0))
+    img2 = Variable(img2.unsqueeze(0))
+    return nn.MSELoss()(img1, img2)
+
+def content_loss(img1_path, img2_path, content_layers=['r42']):
+    img1 = ToTensor()(Image.open(img1_path))
+    img2 = ToTensor()(Image.open(img2_path))
+    if torch.cuda.is_available():
+        img1 = img1.cuda()
+        img2 = img2.cuda()
+    img1 = Variable(img1.unsqueeze(0))
+    img2 = Variable(img2.unsqueeze(0))
+    img1_fm = vgg(img1, content_layers)[0]
+    img2_fm = vgg(img2, content_layers)[0]
+    return nn.MSELoss()(img1_fm, img2_fm)
