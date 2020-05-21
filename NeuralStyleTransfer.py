@@ -100,6 +100,8 @@ def run_neural_style_transfer(content_image_name=content_image_name, style_image
         print("Running neural style transfer %d on " % cnt, os.uname()[1])
     else:
         print("Running neural style transfer on ", os.uname()[1])
+    print("Content image name:", content_image_name)
+    print("Style image name:", style_image_name)
     print("Image size = %d" % img_size)
     print("Max number of iterations = %d" % max_iter)
     print("Show result every %d iterations" % show_iter)
